@@ -1,23 +1,15 @@
 package ru.netology;
 
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.ServerSocket;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.LocalDateTime;
-import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class Server {
-    private final List<String> validPaths = List.of("/index.html", "/spring.svg", "/spring.png",
-            "/resources.html", "/styles.css", "/app.js", "/links.html", "/forms.html", "/classic.html",
-            "/events.html", "/events.js");
-
     private static final int NUMBER_OF_TREADS = 64;
+
+    private static final ConcurrentHashMap<String, ConcurrentHashMap<String, Handler>> HANDLERS = new ConcurrentHashMap<>();
 
     public void listen(int port) {
         try (final var serverSocket = new ServerSocket(port)) {
@@ -27,10 +19,11 @@ public class Server {
 
                 threadPool.execute(() -> {
                     try (
-                            final var in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                            socket;
+                            final var inputStream = socket.getInputStream();
                             final var out = new BufferedOutputStream(socket.getOutputStream());
                     ) {
-                        connectionHandler(in.readLine(), out);
+                        connectionHandler(inputStream, out);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -41,41 +34,38 @@ public class Server {
         }
     }
 
-    private void connectionHandler(String requestLine, BufferedOutputStream out) throws IOException {
-        final var parts = requestLine.split(" ");
-
-        if (parts.length != 3) {
-            // just close socket
-            return;
-        }
-
-        final var path = parts[1];
-        if (!validPaths.contains(path)) {
-            out.write((compose404OutputHeaders()).getBytes());
+    private void connectionHandler(InputStream inputStream, BufferedOutputStream out) throws IOException {
+        Request request = new Request();
+        try {
+            request.parse(inputStream);
+        } catch (BadRequestException e) {
+            out.write(compose400OutputHeaders().getBytes());
             out.flush();
             return;
         }
 
-        final var filePath = Path.of(".", "public", path);
-        final var mimeType = Files.probeContentType(filePath);
-
-        // special case for classic
-        if (path.equals("/classic.html")) {
-            final var template = Files.readString(filePath);
-            final var content = template.replace(
-                    "{time}",
-                    LocalDateTime.now().toString()
-            ).getBytes();
-            out.write((compose200OutputHeaders(mimeType, content.length)).getBytes());
-            out.write(content);
+        if (!HANDLERS.containsKey(request.getMethod())) {
+            out.write(compose404OutputHeaders().getBytes());
             out.flush();
             return;
         }
 
-        final var length = Files.size(filePath);
-        out.write((compose200OutputHeaders(mimeType, length)).getBytes());
-        Files.copy(filePath, out);
-        out.flush();
+        ConcurrentHashMap<String, Handler> handlers = HANDLERS.get(request.getMethod());
+
+        if (!handlers.containsKey(request.getPath())) {
+            out.write(compose404OutputHeaders().getBytes());
+            out.flush();
+            return;
+        }
+
+        handlers.get(request.getPath()).handle(request, out);
+    }
+
+    private String compose400OutputHeaders() {
+        return "HTTP/1.1 400 Bad Request\r\n" +
+                "Content-Length: 0\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
     }
 
     private String compose404OutputHeaders() {
@@ -85,11 +75,18 @@ public class Server {
                 "\r\n";
     }
 
-    private String compose200OutputHeaders(String mimeType, long length) {
+    public String compose200OutputHeaders(String mimeType, long length) {
         return "HTTP/1.1 200 OK\r\n" +
                 "Content-Type: " + mimeType + "\r\n" +
                 "Content-Length: " + length + "\r\n" +
                 "Connection: close\r\n" +
                 "\r\n";
+    }
+
+    public void addHandler(String method, String path, Handler handler) {
+        if (!HANDLERS.containsKey(method)) {
+            HANDLERS.put(method, new ConcurrentHashMap<>());
+        }
+        HANDLERS.get(method).putIfAbsent(path, handler);
     }
 }
