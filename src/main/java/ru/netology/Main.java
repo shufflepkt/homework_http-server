@@ -48,8 +48,6 @@ public class Main {
         });
         server.addHandler("POST", "/messages", (request, responseStream) -> {
             // TODO: handlers code
-            // Не разобрался как добавить обработчик метода POST, а также
-            // как проверить его в работе (отправить запрос POST из браузера на сервер)
         });
 
         server.listen(9999);
