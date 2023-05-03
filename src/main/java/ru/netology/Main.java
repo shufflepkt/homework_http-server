@@ -47,9 +47,8 @@ public class Main {
             responseStream.flush();
         });
         server.addHandler("POST", "/messages", (request, responseStream) -> {
-            // TODO: handlers code
-            // Не разобрался как добавить обработчик метода POST, а также
-            // как проверить его в работе (отправить запрос POST из браузера на сервер)
+            responseStream.write((server.compose200OkHeaders()).getBytes());
+            responseStream.flush();
         });
 
         server.listen(9999);
