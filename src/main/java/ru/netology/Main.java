@@ -47,7 +47,8 @@ public class Main {
             responseStream.flush();
         });
         server.addHandler("POST", "/messages", (request, responseStream) -> {
-            // TODO: handlers code
+            responseStream.write((server.compose200OkHeaders()).getBytes());
+            responseStream.flush();
         });
 
         server.listen(9999);

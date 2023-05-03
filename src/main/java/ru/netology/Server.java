@@ -83,6 +83,13 @@ public class Server {
                 "\r\n";
     }
 
+    public String compose200OkHeaders() {
+        return "HTTP/1.1 200 OK\r\n" +
+                "Content-Length: 0\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
+    }
+
     public void addHandler(String method, String path, Handler handler) {
         if (!HANDLERS.containsKey(method)) {
             HANDLERS.put(method, new ConcurrentHashMap<>());
